@@ -41,9 +41,38 @@
   function renderStory(){screen(`<h2>${t('storyTitle')}</h2><div class="story">${t('story').map(x=>`<p>${x}</p>`).join('')}</div><button class="btn" id="n">${t('next')}</button>`); document.getElementById('n').onclick=renderRules;}
   function renderRules(){screen(`<h2>${t('rulesTitle')}</h2><ul class="rules">${t('rules').map(x=>`<li>${x}</li>`).join('')}</ul><button class="btn" id="n">${t('next')}</button>`); document.getElementById('n').onclick=renderName;}
   function renderName(){screen(`<h2>${t('nameTitle')}</h2><input class="nameInput" id="name" placeholder="${t('namePlaceholder')}" /><button class="btn" id="go">${t('begin')}</button>`); document.getElementById('go').onclick=()=>{const lang=getLang(); const name=document.getElementById('name').value.trim(); createState(lang,name); renderMap();};}
-  function renderMap(){const s=state(); if(!s){renderOpening();return;} setCSSFor(nextStation(s)); const n=nextStation(s); if(!n){renderEnd();return;} screen(`${top(t('map'))}<div class="pill">${t('creatures')} ${s.collected.length}/6 · ⭐ ${s.stars}</div>${progress(s)}<div class="card"><h2>${t('nextHideout')}</h2><p class="story" style="font-size:20px">${GAME_DATA.hints[getLang()][n]||GAME_DATA.hints.he[n]}</p><p class="small" style="text-align:center">${t('scanHint')}</p></div><button class="btn secondary" id="scanBtn">${getLang()==='fr'?'Scanner une station':'סרקו תחנה'}</button><div id="scanPanel"></div>${dev?devLinks():''}`); document.getElementById('scanBtn').onclick=()=>{const panel=document.getElementById('scanPanel'); if(dev){panel.innerHTML=`<div class="card"><b>קישורי תחנות (מצב פיתוח)</b><div class="stack">${GAME_DATA.stations.map(id=>`<a class="btn ghost" href="?station=${id}&dev=1">${id} - ${ct(id,'name')}</a>`).join('')}</div></div>`;} else {panel.innerHTML=`<div class="card"><p class="story" style="font-size:18px">${getLang()==='fr'?'Allez à la station et scannez le code <span dir="ltr">QR</span> qui s’y trouve.':'גשו לתחנה וסרקו את קוד ה־<span dir="ltr">QR</span> שמופיע בה.'}</p></div>`;}}; if(dev) attachDev();}
+  function renderMap(){const s=state(); if(!s){renderOpening();return;} setCSSFor(nextStation(s)); const n=nextStation(s); if(!n){renderEnd();return;} screen(`${top(t('map'))}<div class="pill">${t('creatures')} ${s.collected.length}/6 · ⭐ ${s.stars}</div>${progress(s)}<div class="card"><h2>${t('nextHideout')}</h2><p class="story" style="font-size:20px">${GAME_DATA.hints[getLang()][n]||GAME_DATA.hints.he[n]}</p><p class="small" style="text-align:center">${t('scanHint')}</p></div><button class="btn secondary" id="scanBtn">${getLang()==='fr'?'Scanner une station':'סרקו תחנה'}</button><div id="scanPanel"></div>${dev?devLinks():''}`); document.getElementById('scanBtn').onclick=()=>{const panel=document.getElementById('scanPanel'); if(dev){panel.innerHTML=`<div class="card"><b>קישורי תחנות (מצב פיתוח)</b><div class="stack">${GAME_DATA.stations.map(id=>`<a class="btn ghost" href="?station=${id}&dev=1">${id} - ${ct(id,'name')}</a>`).join('')}</div></div>`;} else {startScanner(panel);}}; if(dev) attachDev();}
   function devLinks(){return `<div class="card"><b>Developer mode</b><div class="stack">${GAME_DATA.stations.map(id=>`<button class="btn ghost devstation" data-id="${id}">${id} - ${ct(id,'name')}</button>`).join('')}</div><button class="btn secondary" id="reset">${t('reset')}</button></div>`;}
   function attachDev(){document.querySelectorAll('.devstation').forEach(b=>b.onclick=()=>renderStation(b.dataset.id)); document.getElementById('reset').onclick=reset;}
+
+  function scanFallback(panel){panel.innerHTML=`<div class="card"><p class="story" style="font-size:18px">${getLang()==='fr'?'Allez à la station et scannez le code <span dir="ltr">QR</span> qui s’y trouve.':'גשו לתחנה וסרקו את קוד ה־<span dir="ltr">QR</span> שמופיע בה.'}</p></div>`;}
+  function extractStationId(text){text=(text||'').trim(); try{const u=new URL(text, location.href); const s=u.searchParams.get('station'); if(s) return s;}catch(e){} const m=text.match(/(?:^|[?&])station=([^&\s]+)/i); return m?decodeURIComponent(m[1]):null;}
+  function loadQrLib(){return new Promise((resolve,reject)=>{ if(window.Html5Qrcode){resolve(); return;} let s=document.querySelector('script[data-qr-lib]'); if(!s){ s=document.createElement('script'); s.src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'; s.setAttribute('data-qr-lib','1'); document.head.appendChild(s); } s.addEventListener('load',()=>resolve()); s.addEventListener('error',()=>reject(new Error('qr-lib-load-failed'))); });}
+  let activeScanner=null;
+  function stopScanner(){const qr=activeScanner; activeScanner=null; if(qr){try{qr.stop().then(()=>qr.clear()).catch(()=>{});}catch(e){}}}
+  function startScanner(panel){
+    const busy=getLang()==='fr'?'Activation de la caméra...':'מפעיל מצלמה...';
+    const cancel=getLang()==='fr'?'Annuler':'ביטול';
+    panel.innerHTML=`<div class="card"><div id="qr-reader" style="width:100%"></div><p class="small" style="text-align:center">${busy}</p><button class="btn secondary" id="qr-cancel">${cancel}</button></div>`;
+    document.getElementById('qr-cancel').onclick=()=>{stopScanner(); scanFallback(panel);};
+    const secure=location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1';
+    if(!secure || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){scanFallback(panel); return;}
+    loadQrLib().then(()=>{
+      if(!window.Html5Qrcode){scanFallback(panel); return;}
+      const qr=new Html5Qrcode('qr-reader'); activeScanner=qr;
+      qr.start({facingMode:'environment'}, {fps:10, qrbox:220}, (decodedText)=>{
+        const id=extractStationId(decodedText);
+        stopScanner();
+        if(id && GAME_DATA.stations.includes(id)){ location.href=location.pathname+'?station='+id; }
+        else {
+          const msg=getLang()==='fr'?'Nous n’avons pas reconnu de station dans ce code. Réessayez.':'לא זיהינו תחנה בקוד שנסרק. נסו שוב.';
+          const retry=getLang()==='fr'?'Réessayer':'נסו שוב';
+          panel.innerHTML=`<div class="card"><p class="feedback">${msg}</p></div><button class="btn secondary" id="qr-retry">${retry}</button>`;
+          document.getElementById('qr-retry').onclick=()=>startScanner(panel);
+        }
+      }, ()=>{}).catch(()=>{ activeScanner=null; scanFallback(panel); });
+    }).catch(()=>{ scanFallback(panel); });
+  }
 
   function handleStation(){const s=state(); if(!s){renderOpening();return;} if(!stationParam){renderMap();return;} if(!GAME_DATA.stations.includes(stationParam)){renderMap();return;} renderStation(stationParam);}
   function renderStation(id){const s=state(); if(!s){renderOpening();return;} setCSSFor(id); const n=nextStation(s); if(s.collected.includes(id)){screen(`${top(ct(id,'place'))}<div class="creature card">${img(id)}<div class="creatureText"><h2>${ct(id,'name')} ${t('alreadyTitle')}</h2><p>${t('alreadyText')}</p></div></div><button class="btn" id="map">${t('backMap')}</button>`); document.getElementById('map').onclick=renderMap; return;}
