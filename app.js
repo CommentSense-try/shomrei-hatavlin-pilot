@@ -94,10 +94,94 @@
     document.getElementById('quiz').onclick=()=>renderQuiz(id);
     document.getElementById('wait').onclick=()=>{document.getElementById('wait').outerHTML=`<div class="feedback">...<br>...<br>${t('waitResult')}</div>`;};
   }
-  function renderQuiz(id, selectedIndex=null, result=null){const s=state(); setCSSFor(id); const questions=qset(id); const qi=s.currentQuestion||0; const q=questions[qi]; const reveal=result?Math.min(qi+1,questions.length):qi; const pct=(reveal/questions.length)*100; const disabled=result?'disabled':'';
-    screen(`${top(ct(id,'place'))}<div class="quizCreatureWrap">${revealFigure(id,reveal)}<b>${ct(id,'name')}</b></div><div class="bar"><span style="width:${pct}%"></span></div><div class="question">${q.text}</div><div class="answers">${q.answers.map((a,i)=>`<button class="answer ${selectedIndex===i?(a.correct?'good':'bad'):''}" data-i="${i}" ${disabled}>${letter(i)}. ${a.text}</button>`).join('')}</div><div id="fb">${result?result:''}</div>`);
-    document.querySelectorAll('.answer').forEach(b=>b.onclick=()=>answer(id,Number(b.dataset.i)));
+  function renderQuiz(id, selectedIndex = null, result = null) {
+  const s = state();
+  setCSSFor(id);
+
+  const questions = qset(id);
+  const qi = s.currentQuestion || 0;
+  const q = questions[qi];
+
+  const hasResult = result !== null;
+  const reveal = hasResult
+    ? Math.min(qi + 1, questions.length)
+    : qi;
+
+  const pct = (reveal / questions.length) * 100;
+
+  const answersToShow = hasResult
+    ? q.answers
+        .map((answerItem, index) => ({ answerItem, index }))
+        .filter(item => item.index === selectedIndex)
+    : q.answers.map((answerItem, index) => ({ answerItem, index }));
+
+  const answersHTML = answersToShow
+    .map(({ answerItem, index }) => {
+      const resultClass =
+        selectedIndex === index
+          ? (answerItem.correct ? 'good' : 'bad')
+          : '';
+
+      return `
+        <button
+          class="answer ${resultClass}"
+          data-i="${index}"
+          ${hasResult ? 'disabled' : ''}
+        >
+          ${letter(index)}. ${answerItem.text}
+        </button>
+      `;
+    })
+    .join('');
+
+  screen(`
+    ${top(ct(id, 'place'))}
+
+    <div class="quizCreatureWrap">
+      ${revealFigure(id, reveal)}
+      <b>${ct(id, 'name')}</b>
+    </div>
+
+    <div class="bar">
+      <span style="width:${pct}%"></span>
+    </div>
+
+    <div class="question">${q.text}</div>
+
+    <div class="answers">
+      ${answersHTML}
+    </div>
+
+    <div id="fb">
+      ${hasResult ? result : ''}
+    </div>
+  `);
+
+  if (!hasResult) {
+    document.querySelectorAll('.answer').forEach(button => {
+      button.onclick = () => answer(id, Number(button.dataset.i));
+    });
   }
+
+  if (hasResult) {
+    requestAnimationFrame(() => {
+      const feedback = document.getElementById('fb');
+
+      if (!feedback) return;
+
+      const rect = feedback.getBoundingClientRect();
+      const isOutsideViewport =
+        rect.top < 0 || rect.bottom > window.innerHeight;
+
+      if (isOutsideViewport) {
+        feedback.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest'
+        });
+      }
+    });
+  }
+}
   function answer(id,i){const s=state(); const q=currentQ(s,id); const a=q.answers[i]; if(a.correct){s.stars+=1; save(s); const html=`<div class="explain"><b>✅ ${t('correct')}</b><br>${q.explanation||''}</div><button class="btn" id="cont">${t('continue')}</button>`; renderQuiz(id,i,html); document.getElementById('cont').onclick=()=>{s.currentQuestion=(s.currentQuestion||0)+1; save(s); if(s.currentQuestion>=qset(id).length){completeStation(id);} else renderQuiz(id);}; }
     else {const html=`<div class="feedback"><b>${ct(id,'name')} עוד לא השתכנע.</b><br>${a.feedback}<br><br>${getLang()==='he'?'נסו שוב.':'Essayez encore.'}</div><button class="btn secondary" id="try">${t('tryAgain')}</button>`; renderQuiz(id,i,html); document.getElementById('try').onclick=()=>renderQuiz(id);}
   }
