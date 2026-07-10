@@ -62,32 +62,154 @@
   function loadQrLib(){return new Promise((resolve,reject)=>{ if(window.Html5Qrcode){resolve(); return;} let s=document.querySelector('script[data-qr-lib]'); if(!s){ s=document.createElement('script'); s.src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'; s.setAttribute('data-qr-lib','1'); document.head.appendChild(s); } s.addEventListener('load',()=>resolve()); s.addEventListener('error',()=>reject(new Error('qr-lib-load-failed'))); });}
   let activeScanner=null;
   function stopScanner(){const qr=activeScanner; activeScanner=null; if(qr){try{qr.stop().then(()=>qr.clear()).catch(()=>{});}catch(e){}}}
-  function startScanner(panel){
-    const busy=getLang()==='fr'?'Activation de la caméra...':'מפעיל מצלמה...';
-    const cancel=getLang()==='fr'?'Annuler':'ביטול';
-    panel.innerHTML=`<div class="card"><div id="qr-reader" style="width:100%"></div><p class="small" style="text-align:center">${busy}</p><button class="btn secondary" id="qr-cancel">${cancel}</button></div>`;
-    document.getElementById('qr-cancel').onclick=()=>{stopScanner(); scanFallback(panel);};
-    const secure=location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1';
-    if(!secure || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){scanFallback(panel); return;}
-    loadQrLib().then(()=>{
-      if(!window.Html5Qrcode){scanFallback(panel); return;}
-      const qr=new Html5Qrcode('qr-reader'); activeScanner=qr;
-      qr.start({facingMode:'environment'}, {fps:10, qrbox:220}, (decodedText)=>{
-        const id=extractStationId(decodedText);
-        stopScanner();
-        if(id && GAME_DATA.stations.includes(id)){ location.href=location.pathname+'?station='+id; }
-        else {
-          const msg=getLang()==='fr'?'Nous n’avons pas reconnu de station dans ce code. Réessayez.':'לא זיהינו תחנה בקוד שנסרק. נסו שוב.';
-          const retry=getLang()==='fr'?'Réessayer':'נסו שוב';
-          panel.innerHTML=`<div class="card"><p class="feedback">${msg}</p></div><button class="btn secondary" id="qr-retry">${retry}</button>`;
-          document.getElementById('qr-retry').onclick=()=>startScanner(panel);
-        }
-      }, ()=>{}).catch(()=>{ activeScanner=null; scanFallback(panel); });
-    }).catch(()=>{ scanFallback(panel); });
+  function startScanner(panel) {
+  const busy =
+    getLang() === 'fr'
+      ? 'Activation de la caméra...'
+      : 'מפעיל מצלמה...';
+
+  const cancel =
+    getLang() === 'fr'
+      ? 'Annuler'
+      : 'ביטול';
+
+  panel.innerHTML = `
+    <div class="card">
+      <div id="qr-reader" style="width:100%"></div>
+
+      <p class="small" style="text-align:center">
+        ${busy}
+      </p>
+
+      <button class="btn secondary" id="qr-cancel">
+        ${cancel}
+      </button>
+    </div>
+  `;
+
+  const reader = document.getElementById('qr-reader');
+
+  function bringScannerIntoView() {
+    if (!reader) return;
+
+    requestAnimationFrame(() => {
+      reader.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    });
   }
 
-  function handleStation(){const s=state(); if(!s){renderOpening();return;} if(!stationParam){renderMap();return;} if(!GAME_DATA.stations.includes(stationParam)){renderMap();return;} renderStation(stationParam);}
-  function renderStation(id){const s=state(); if(!s){renderOpening();return;} setCSSFor(id); const n=nextStation(s); if(s.collected.includes(id)){screen(`${top(ct(id,'place'))}<div class="creature card">${img(id)}<div class="creatureText"><h2>${ct(id,'name')} ${t('alreadyTitle')}</h2><p>${t('alreadyText')}</p></div></div><button class="btn" id="map">${t('backMap')}</button>`); document.getElementById('map').onclick=renderMap; return;}
+  bringScannerIntoView();
+
+  document.getElementById('qr-cancel').onclick = () => {
+    stopScanner();
+    scanFallback(panel);
+  };
+
+  const secure =
+    location.protocol === 'https:' ||
+    location.hostname === 'localhost' ||
+    location.hostname === '127.0.0.1';
+
+  if (
+    !secure ||
+    !navigator.mediaDevices ||
+    !navigator.mediaDevices.getUserMedia
+  ) {
+    scanFallback(panel);
+    return;
+  }
+
+  loadQrLib()
+    .then(() => {
+      if (!window.Html5Qrcode) {
+        scanFallback(panel);
+        return;
+      }
+
+      const qr = new Html5Qrcode('qr-reader');
+      activeScanner = qr;
+
+      qr.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: 220
+        },
+        decodedText => {
+          const id = extractStationId(decodedText);
+
+          stopScanner();
+
+          if (id && GAME_DATA.stations.includes(id)) {
+            location.href =
+              location.pathname + '?station=' + id;
+          } else {
+            const msg =
+              getLang() === 'fr'
+                ? 'Nous n’avons pas reconnu de station dans ce code. Réessayez.'
+                : 'לא זיהינו תחנה בקוד שנסרק. נסו שוב.';
+
+            const retry =
+              getLang() === 'fr'
+                ? 'Réessayer'
+                : 'נסו שוב';
+
+            panel.innerHTML = `
+              <div class="card">
+                <p class="feedback">
+                  ${msg}
+                </p>
+              </div>
+
+              <button class="btn secondary" id="qr-retry">
+                ${retry}
+              </button>
+            `;
+
+            document.getElementById('qr-retry').onclick = () => {
+              startScanner(panel);
+            };
+          }
+        },
+        () => {}
+      )
+      .then(() => {
+        bringScannerIntoView();
+      })
+      .catch(() => {
+        activeScanner = null;
+        scanFallback(panel);
+      });
+    })
+    .catch(() => {
+      scanFallback(panel);
+    });
+}
+
+function handleStation() {
+  const s = state();
+
+  if (!s) {
+    renderOpening();
+    return;
+  }
+
+  if (!stationParam) {
+    renderMap();
+    return;
+  }
+
+  if (!GAME_DATA.stations.includes(stationParam)) {
+    renderMap();
+    return;
+  }
+
+  renderStation(stationParam);
+}
+
+function renderStation(id) {const s=state(); if(!s){renderOpening();return;} setCSSFor(id); const n=nextStation(s); if(s.collected.includes(id)){screen(`${top(ct(id,'place'))}<div class="creature card">${img(id)}<div class="creatureText"><h2>${ct(id,'name')} ${t('alreadyTitle')}</h2><p>${t('alreadyText')}</p></div></div><button class="btn" id="map">${t('backMap')}</button>`); document.getElementById('map').onclick=renderMap; return;}
     if(id!==n && !dev){screen(`${top(ct(id,'place'))}<div class="creature card">${img(id)}<div class="creatureText"><h2>${t('wrongStationTitle')}</h2><p>${t('wrongStationText')}</p></div></div><button class="btn" id="map">${t('backMap')}</button>`); document.getElementById('map').onclick=renderMap; return;}
     s.currentQuestion=0; s.stationStart=now(); save(s);
     screen(`${top(ct(id,'place'))}<div class="creature card creatureTextOnly"><div class="creatureText"><h2>${t('found')} ${ct(id,'name')}!</h2><p>${t('patient')}</p><p class="small">${ct(id,'role')} · ${ct(id,'contribution')}</p></div></div><div class="stack"><button class="btn" id="quiz">${t('answerQuestions')}</button><button class="btn secondary" id="wait">${t('wait')}</button></div>`);
