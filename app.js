@@ -41,7 +41,13 @@
   function currentIndex(s){const n=nextStation(s);return n?s.route.indexOf(n)+1:6;}
   function qset(id){return QUESTIONS[getLang()]?.[id] || QUESTIONS.he[id];}
   function currentQ(s,id){return qset(id)[s.currentQuestion||0];}
-  function letter(i){return ['א','ב','ג','ד'][i] || (i+1);}
+  function letter(i){
+  if(getLang()==='fr'){
+    return ['a','b','c','d'][i] || (i+1);
+  }
+
+  return ['א','ב','ג','ד'][i] || (i+1);
+}
 
   function renderOpening(){screen(`
     <div class="openingScreen">
