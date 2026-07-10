@@ -210,7 +210,27 @@ function handleStation() {
 }
 
 function renderStation(id) {const s=state(); if(!s){renderOpening();return;} setCSSFor(id); const n=nextStation(s); if(s.collected.includes(id)){screen(`${top(ct(id,'place'))}<div class="creature card">${img(id)}<div class="creatureText"><h2>${ct(id,'name')} ${t('alreadyTitle')}</h2><p>${t('alreadyText')}</p></div></div><button class="btn" id="map">${t('backMap')}</button>`); document.getElementById('map').onclick=renderMap; return;}
-    if(id!==n && !dev){screen(`${top(ct(id,'place'))}<div class="creature card">${img(id)}<div class="creatureText"><h2>${t('wrongStationTitle')}</h2><p>${t('wrongStationText')}</p></div></div><button class="btn" id="map">${t('backMap')}</button>`); document.getElementById('map').onclick=renderMap; return;}
+    if (id !== n && !dev) {
+  screen(`
+    ${top(ct(id, 'place'))}
+
+    <div class="creature card">
+      ${img(id, '', 'hidden')}
+
+      <div class="creatureText">
+        <h2>${t('wrongStationTitle')}</h2>
+        <p>${t('wrongStationText')}</p>
+      </div>
+    </div>
+
+    <button class="btn" id="map">
+      ${t('backMap')}
+    </button>
+  `);
+
+  document.getElementById('map').onclick = renderMap;
+  return;
+}
     s.currentQuestion=0; s.stationStart=now(); save(s);
     screen(`${top(ct(id,'place'))}<div class="creature card creatureTextOnly"><div class="creatureText"><h2>${t('found')} ${ct(id,'name')}!</h2><p>${t('patient')}</p><p class="small">${ct(id,'role')} · ${ct(id,'contribution')}</p></div></div><div class="stack"><button class="btn" id="quiz">${t('answerQuestions')}</button><button class="btn secondary" id="wait">${t('wait')}</button></div>`);
     document.getElementById('quiz').onclick=()=>renderQuiz(id);
@@ -305,9 +325,33 @@ function renderStation(id) {const s=state(); if(!s){renderOpening();return;} set
   }
 }
   function answer(id,i){const s=state(); const q=currentQ(s,id); const a=q.answers[i]; if(a.correct){s.stars+=1; save(s); const html=`<div class="explain"><b>✅ ${t('correct')}</b><br>${q.explanation||''}</div><button class="btn" id="cont">${t('continue')}</button>`; renderQuiz(id,i,html); document.getElementById('cont').onclick=()=>{s.currentQuestion=(s.currentQuestion||0)+1; save(s); if(s.currentQuestion>=qset(id).length){completeStation(id);} else renderQuiz(id);}; }
-    else {const html=`<div class="feedback"><b>${ct(id,'name')} עוד לא השתכנע.</b><br>${a.feedback}<br><br>${getLang()==='he'?'נסו שוב.':'Essayez encore.'}</div><button class="btn secondary" id="try">${t('tryAgain')}</button>`; renderQuiz(id,i,html); document.getElementById('try').onclick=()=>renderQuiz(id);}
-  }
-  function maybeBonus(s){const elapsed=Math.floor((now()-s.stationStart)/1000); const target=s.bonusTimes.find(x=>!s.usedBonuses.includes(x)); if(target && elapsed===target){s.usedBonuses.push(target); s.bonuses+=1; s.stars+=1; save(s); return true;} return false;}
+    else {
+  const notConvinced =
+    getLang() === 'fr'
+      ? `${ct(id, 'name')} n’est pas encore convaincu.`
+      : `${ct(id, 'name')} עוד לא השתכנע.`;
+
+  const html = `
+    <div class="feedback">
+      <b>${notConvinced}</b>
+      <br>
+      ${a.feedback}
+      <br><br>
+      ${getLang() === 'he' ? 'נסו שוב.' : 'Essayez encore.'}
+    </div>
+
+    <button class="btn secondary" id="try">
+      ${t('tryAgain')}
+    </button>
+  `;
+
+  renderQuiz(id, i, html);
+
+  document.getElementById('try').onclick = () => renderQuiz(id);
+}
+}
+
+function maybeBonus(s){const elapsed=Math.floor((now()-s.stationStart)/1000); const target=s.bonusTimes.find(x=>!s.usedBonuses.includes(x)); if(target && elapsed===target){s.usedBonuses.push(target); s.bonuses+=1; s.stars+=1; save(s); return true;} return false;}
   function completeStation(id){const s=state(); if(!s.collected.includes(id)) s.collected.push(id); s.currentQuestion=0; s.stars+=2; const bonus=maybeBonus(s); save(s); setCSSFor(id); screen(`${top(ct(id,'place'))}<div class="creature card">${revealFigure(id,4)}<div class="creatureText"><h2>${ct(id,'name')} ${t('captured')}</h2><p>${ct(id,'role')}</p><p><b>${ct(id,'contribution')}</b></p></div></div>${bonus?`<div class="explain"><b>${t('bonusTitle')}</b><br>${t('bonusText')}</div>`:''}<button class="btn" id="map">${s.collected.length===6?t('continue'):t('backMap')}</button>`); document.getElementById('map').onclick=()=>{ if(s.collected.length===6) renderEnd(); else renderMap();};}
   function renderEnd(){const s=state(); const gathered=GAME_DATA.stations.map((id,i)=>img(id,`finalChar final-${i}`)).join(''); screen(`${top('🏆')}<h2>${t('endTitle')}</h2><div class="finalGather">${gathered}</div><div class="stats"><div class="stat"><span>${t('time')}</span><b>${fmt((now()-s.start)/1000)}</b></div><div class="stat"><span>${t('stars')}</span><b>⭐ ${s.stars}</b></div><div class="stat"><span>${t('bonuses')}</span><b>${s.bonuses}</b></div></div><div class="finalLine">${t('endLines').map(x=>`<p>${x}</p>`).join('')}<p>📸 ${t('screenshot')}</p></div><button class="btn secondary" id="reset">${t('reset')}</button><div class="footer">${t('thanks')}</div>`); document.getElementById('reset').onclick=reset;}
   function tick(){const el=document.querySelector('.timer');const s=state(); if(el&&s) el.textContent=fmt((now()-s.start)/1000);}
