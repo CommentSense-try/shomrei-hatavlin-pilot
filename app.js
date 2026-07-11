@@ -4,9 +4,11 @@
   const params=new URLSearchParams(location.search);
   const stationParam=params.get('station');
   const langParam=params.get('lang');
-  const dev=params.get('dev')==='1';
-  const SECRET_BASE=[77,28,42];
+const dev = params.get('dev') === '1';
+const SECRET_BASE = [77, 28, 42];
 
+const RESULTS_URL =
+  'https://script.google.com/macros/s/AKfycbyYBi_9H-lXrX2yrQPy8fpwJ4KoPJmEaYKuI6IGtf1r5rPwZ98kLnLSldw_x3HD21TM/exec';
   function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
   function now(){return Date.now();}
   function escapeHTML(str){return String(str==null?'':str).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -64,11 +66,104 @@
   function attachDev(){document.querySelectorAll('.devstation').forEach(b=>b.onclick=()=>renderStation(b.dataset.id)); document.getElementById('reset').onclick=reset;}
 
   function scanFallback(panel){panel.innerHTML=`<div class="card"><p class="story" style="font-size:18px">${getLang()==='fr'?'Allez à la station et scannez le code <span dir="ltr">QR</span> qui s’y trouve.':'גשו לתחנה וסרקו את קוד ה־<span dir="ltr">QR</span> שמופיע בה.'}</p></div>`;}
-  function extractStationId(text){text=(text||'').trim(); try{const u=new URL(text, location.href); const s=u.searchParams.get('station'); if(s) return s;}catch(e){} const m=text.match(/(?:^|[?&])station=([^&\s]+)/i); return m?decodeURIComponent(m[1]):null;}
-  function loadQrLib(){return new Promise((resolve,reject)=>{ if(window.Html5Qrcode){resolve(); return;} let s=document.querySelector('script[data-qr-lib]'); if(!s){ s=document.createElement('script'); s.src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'; s.setAttribute('data-qr-lib','1'); document.head.appendChild(s); } s.addEventListener('load',()=>resolve()); s.addEventListener('error',()=>reject(new Error('qr-lib-load-failed'))); });}
-  let activeScanner=null;
-  function stopScanner(){const qr=activeScanner; activeScanner=null; if(qr){try{qr.stop().then(()=>qr.clear()).catch(()=>{});}catch(e){}}}
-  function startScanner(panel) {
+  function extractStationId(text) {
+  text = (text || '').trim();
+
+  try {
+    const u = new URL(text, location.href);
+    const s = u.searchParams.get('station');
+
+    if (s) return s;
+  } catch (e) {}
+
+  const m = text.match(/(?:^|[?&])station=([^&\s]+)/i);
+
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+function loadQrLib() {
+  return new Promise((resolve, reject) => {
+    if (window.Html5Qrcode) {
+      resolve();
+      return;
+    }
+
+    let s = document.querySelector('script[data-qr-lib]');
+
+    if (!s) {
+      s = document.createElement('script');
+      s.src =
+        'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+      s.setAttribute('data-qr-lib', '1');
+      document.head.appendChild(s);
+    }
+
+    s.addEventListener('load', () => resolve());
+    s.addEventListener('error', () =>
+      reject(new Error('qr-lib-load-failed'))
+    );
+  });
+}
+
+let activeScanner = null;
+
+function stopScanner() {
+  const qr = activeScanner;
+  activeScanner = null;
+
+  if (qr) {
+    try {
+      qr
+        .stop()
+        .then(() => qr.clear())
+        .catch(() => {});
+    } catch (e) {}
+  }
+}
+
+function ensureSubmissionId(s) {
+  if (!s.submissionId) {
+    const hasRandomUUID =
+      window.crypto &&
+      typeof window.crypto.randomUUID === 'function';
+
+    s.submissionId = hasRandomUUID
+      ? window.crypto.randomUUID()
+      : `sh-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 10)}`;
+
+    save(s);
+  }
+
+  return s.submissionId;
+}
+
+async function submitResult(s) {
+  const elapsedSeconds = Math.floor(
+    (now() - s.start) / 1000
+  );
+
+  const body = new URLSearchParams({
+    journeyName: s.name || '',
+    stars: String(s.stars || 0),
+    bonuses: String(s.bonuses || 0),
+    elapsedSeconds: String(elapsedSeconds),
+    language: s.lang || getLang(),
+    submissionId: ensureSubmissionId(s)
+  });
+
+  await fetch(RESULTS_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    body
+  });
+
+  s.resultSubmitted = true;
+  save(s);
+}
+
+function startScanner(panel) {
   const busy =
     getLang() === 'fr'
       ? 'Activation de la caméra...'
@@ -359,7 +454,112 @@ function renderStation(id) {const s=state(); if(!s){renderOpening();return;} set
 
 function maybeBonus(s){const elapsed=Math.floor((now()-s.stationStart)/1000); const target=s.bonusTimes.find(x=>!s.usedBonuses.includes(x)); if(target && elapsed===target){s.usedBonuses.push(target); s.bonuses+=1; s.stars+=1; save(s); return true;} return false;}
   function completeStation(id){const s=state(); if(!s.collected.includes(id)) s.collected.push(id); s.currentQuestion=0; s.stars+=2; const bonus=maybeBonus(s); save(s); setCSSFor(id); screen(`${top(ct(id,'place'))}<div class="creature card">${revealFigure(id,4)}<div class="creatureText"><h2>${ct(id,'name')} ${t('captured')}</h2><p>${ct(id,'role')}</p><p><b>${ct(id,'contribution')}</b></p></div></div>${bonus?`<div class="explain"><b>${t('bonusTitle')}</b><br>${t('bonusText')}</div>`:''}<button class="btn" id="map">${s.collected.length===6?t('continue'):t('backMap')}</button>`); document.getElementById('map').onclick=()=>{ if(s.collected.length===6) renderEnd(); else renderMap();};}
-  function renderEnd(){const s=state(); const gathered=GAME_DATA.stations.map((id,i)=>img(id,`finalChar final-${i}`)).join(''); screen(`${top('🏆')}<h2>${t('endTitle')}</h2><div class="finalGather">${gathered}</div><div class="stats"><div class="stat"><span>${t('time')}</span><b>${fmt((now()-s.start)/1000)}</b></div><div class="stat"><span>${t('stars')}</span><b>⭐ ${s.stars}</b></div><div class="stat"><span>${t('bonuses')}</span><b>${s.bonuses}</b></div></div><div class="finalLine">${t('endLines').map(x=>`<p>${x}</p>`).join('')}<p>📸 ${t('screenshot')}</p></div><button class="btn secondary" id="reset">${t('reset')}</button><div class="footer">${t('thanks')}</div>`); document.getElementById('reset').onclick=reset;}
+  function renderEnd() {
+  const s = state();
+
+  const gathered = GAME_DATA.stations
+    .map((id, i) => img(id, `finalChar final-${i}`))
+    .join('');
+
+  const isFrench = getLang() === 'fr';
+
+  const sendingText = isFrench
+    ? 'Envoi du résultat...'
+    : 'שולח את התוצאה...';
+
+  const sentText = isFrench
+    ? '✅ Le résultat a été envoyé.'
+    : '✅ התוצאה נשלחה.';
+
+  const failedText = isFrench
+    ? 'La connexion a échoué. Vous pouvez réessayer.'
+    : 'השליחה נכשלה. אפשר לנסות שוב.';
+
+  const retryText = isFrench
+    ? 'Réessayer l’envoi'
+    : 'נסו לשלוח שוב';
+
+  screen(`
+    ${top('🏆')}
+
+    <h2>${t('endTitle')}</h2>
+
+    <div class="finalGather">
+      ${gathered}
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <span>${t('time')}</span>
+        <b>${fmt((now() - s.start) / 1000)}</b>
+      </div>
+
+      <div class="stat">
+        <span>${t('stars')}</span>
+        <b>⭐ ${s.stars}</b>
+      </div>
+
+      <div class="stat">
+        <span>${t('bonuses')}</span>
+        <b>${s.bonuses}</b>
+      </div>
+    </div>
+
+    <div class="finalLine">
+      ${t('endLines').map(x => `<p>${x}</p>`).join('')}
+      <p>📸 ${t('screenshot')}</p>
+    </div>
+
+    <div
+      id="resultSendStatus"
+      class="resultSendStatus"
+      aria-live="polite"
+    >
+      ${s.resultSubmitted ? sentText : sendingText}
+    </div>
+
+    <button
+      class="btn secondary"
+      id="retryResult"
+      ${s.resultSubmitted ? 'hidden' : ''}
+    >
+      ${retryText}
+    </button>
+
+    <button class="btn secondary" id="reset">
+      ${t('reset')}
+    </button>
+
+    <div class="footer">
+      ${t('thanks')}
+    </div>
+  `);
+
+  const status = document.getElementById('resultSendStatus');
+  const retryButton = document.getElementById('retryResult');
+
+  function sendCurrentResult() {
+    status.textContent = sendingText;
+    retryButton.hidden = true;
+
+    submitResult(s)
+      .then(() => {
+        status.textContent = sentText;
+        retryButton.hidden = true;
+      })
+      .catch(() => {
+        status.textContent = failedText;
+        retryButton.hidden = false;
+      });
+  }
+
+  retryButton.onclick = sendCurrentResult;
+  document.getElementById('reset').onclick = reset;
+
+  if (!s.resultSubmitted) {
+    sendCurrentResult();
+  }
+}
   function tick(){const el=document.querySelector('.timer');const s=state(); if(el&&s) el.textContent=fmt((now()-s.start)/1000);}
   setInterval(tick,1000);
   if(stationParam) handleStation(); else {const s=state(); if(s&&s.name) renderMap(); else renderOpening();}
