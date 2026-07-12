@@ -60,8 +60,80 @@ const RESULTS_URL =
   `); document.getElementById('start').onclick=()=>renderStory(); document.querySelectorAll('[data-lang]').forEach(b=>b.onclick=()=>{createState(b.dataset.lang,''); renderOpening(); history.replaceState(null,'',location.pathname+'?lang='+b.dataset.lang);});}
   function renderStory(){screen(`<h2>${t('storyTitle')}</h2><div class="story">${t('story').map(x=>`<p>${x}</p>`).join('')}</div><button class="btn" id="n">${t('next')}</button>`); document.getElementById('n').onclick=renderRules;}
   function renderRules(){screen(`<h2>${t('rulesTitle')}</h2><ul class="rules">${t('rules').map(x=>`<li>${x}</li>`).join('')}</ul><button class="btn" id="n">${t('next')}</button>`); document.getElementById('n').onclick=renderName;}
-  function renderName(){screen(`<h2>${t('nameTitle')}</h2><input class="nameInput" id="name" placeholder="${t('namePlaceholder')}" /><button class="btn" id="go">${t('begin')}</button>`); document.getElementById('go').onclick=()=>{const lang=getLang(); const name=document.getElementById('name').value.trim(); createState(lang,name); renderMap();};}
-  function renderMap(){const s=state(); if(!s){renderOpening();return;} setCSSFor(nextStation(s)); const n=nextStation(s); if(!n){renderEnd();return;} screen(`${top(t('map'))}<div class="pill">${t('creatures')} ${s.collected.length}/6 · ⭐ ${s.stars}</div>${progress(s)}<div class="card"><h2>${t('nextHideout')}</h2><p class="story" style="font-size:20px">${GAME_DATA.hints[getLang()][n]||GAME_DATA.hints.he[n]}</p><p class="small" style="text-align:center">${t('scanHint')}</p></div><button class="btn secondary" id="scanBtn">${getLang()==='fr'?'Scanner une station':'סרקו תחנה'}</button><div id="scanPanel"></div>${dev?devLinks():''}`); document.getElementById('scanBtn').onclick=()=>{const panel=document.getElementById('scanPanel'); if(dev){panel.innerHTML=`<div class="card"><b>קישורי תחנות (מצב פיתוח)</b><div class="stack">${GAME_DATA.stations.map(id=>`<a class="btn ghost" href="?station=${id}&dev=1">${id} - ${ct(id,'name')}</a>`).join('')}</div></div>`;} else {startScanner(panel);}}; if(dev) attachDev();}
+  function renderName(){screen(`<h2>${t('nameTitle')}</h2><input class="nameInput" id="name" placeholder="${t('namePlaceholder')}" /><button class="btn" id="go">${t('begin')}</button>`); document.getElementById('go').onclick=()=>{const lang=getLang(); const name=document.getElementById('name').value.trim(); createState(lang,name); 
+renderMap();
+};
+}
+
+  function openSiteMap() {
+  const isFrench = getLang() === 'fr';
+
+  const title = isFrench
+    ? 'Plan du jardin biblique'
+    : 'מפת הגן התנ״כי';
+
+  const closeText = isFrench
+    ? 'Fermer'
+    : 'סגירה';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'mapOverlay';
+
+  overlay.innerHTML = `
+    <div
+      class="mapDialog"
+      role="dialog"
+      aria-modal="true"
+      aria-label="${title}"
+    >
+      <div class="mapDialogHeader">
+        <h2>${title}</h2>
+
+        <button
+          class="mapClose"
+          id="mapClose"
+          type="button"
+          aria-label="${closeText}"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div class="siteMapViewport">
+        <img
+          src="assets/images/yad_hashmona_map.webp"
+          alt="${title}"
+        >
+      </div>
+
+      <button
+        class="btn secondary"
+        id="mapCloseBottom"
+        type="button"
+      >
+        ${closeText}
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  document.body.classList.add('mapOpen');
+
+  function closeMap() {
+    overlay.remove();
+    document.body.classList.remove('mapOpen');
+  }
+
+  document.getElementById('mapClose').onclick = closeMap;
+  document.getElementById('mapCloseBottom').onclick = closeMap;
+
+  overlay.onclick = event => {
+    if (event.target === overlay) {
+      closeMap();
+  };
+}
+
+function renderMap(){const s=state(); if(!s){renderOpening();return;} setCSSFor(nextStation(s)); const n=nextStation(s); if(!n){renderEnd();return;} screen(`${top(t('map'))}<div class="pill">${t('creatures')} ${s.collected.length}/6 · ⭐ ${s.stars}</div>${progress(s)}<div class="card"><h2>${t('nextHideout')}</h2><p class="story" style="font-size:20px">${GAME_DATA.hints[getLang()][n]||GAME_DATA.hints.he[n]}</p><p class="small" style="text-align:center">${t('scanHint')}</p></div><button class="btn ghost" id="siteMapBtn">🗺️ ${getLang()==='fr'?'Ouvrir le plan':'פתחו מפה'}</button><button class="btn secondary" id="scanBtn">${getLang()==='fr'?'Scanner une station':'סרקו תחנה'}</button><div id="scanPanel"></div>${dev?devLinks():''}`); document.getElementById('siteMapBtn').onclick = openSiteMap;document.getElementById('scanBtn').onclick=()=>{const panel=document.getElementById('scanPanel'); if(dev){panel.innerHTML=`<div class="card"><b>קישורי תחנות (מצב פיתוח)</b><div class="stack">${GAME_DATA.stations.map(id=>`<a class="btn ghost" href="?station=${id}&dev=1">${id} - ${ct(id,'name')}</a>`).join('')}</div></div>`;} else {startScanner(panel);}}; if(dev) attachDev();}
   function devLinks(){return `<div class="card"><b>Developer mode</b><div class="stack">${GAME_DATA.stations.map(id=>`<button class="btn ghost devstation" data-id="${id}">${id} - ${ct(id,'name')}</button>`).join('')}</div><button class="btn secondary" id="reset">${t('reset')}</button></div>`;}
   function attachDev(){document.querySelectorAll('.devstation').forEach(b=>b.onclick=()=>renderStation(b.dataset.id)); document.getElementById('reset').onclick=reset;}
 
